@@ -1,5 +1,9 @@
 # shinyHTM
 
+### How to cite
+
+- Hugo Botelho, Christian Tischer, Aliaksandr Halavatyi, Margarida Amaral, Rainer Pepperkok. shinyHTM - Interactive High-Throughput Microscopy Analysis. Zenodo. http://doi.org/10.5281/zenodo.2594651
+
 ### Exploring High Throughput Microscopy data with Shiny, Plotly and Fiji
 
 One of the biggest challenges in High Throughput Microscopy is the visualization, inspection and quality control of the large datasets that are usually produced. Nevertheless, these tasks are crucial for assessing the quality of the data and ensure that biologically meaningful quantitative data is extracted.
