@@ -54,7 +54,7 @@ install.packages(c("shiny","shinyalert","plotly","shinyjs","xlsx", "tcltk", "RJS
 * Type the following commands:  
 ```r
 library(shiny)
-runGitHub("shinyHTM", "hmbotelho")
+runGitHub("shinyHTM", "embl-cba")
 ```
 * This will run the latest version of shinyHTM  
 * Sample datasets are provided [here](https://github.com/hmbotelho/sample_data).  
@@ -74,7 +74,7 @@ install.packages(c("shiny","shinyalert","plotly","shinyjs","xlsx", "tcltk", "RJS
 * Type the following commands:  
 ```r
 library(shiny)
-runGitHub("shinyHTM", "hmbotelho")
+runGitHub("shinyHTM", "embl-cba")
 ```
 * This will run the latest version of shinyHTM  
 * Sample datasets are provided [here](https://github.com/hmbotelho/sample_data).  
