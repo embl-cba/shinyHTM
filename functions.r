@@ -1091,20 +1091,17 @@ htmMatrixToXYV <- function(xx, yy, m, mi) {
 #
 
 htmTreatmentSummary <- function(data, measurements, col_Experiment, col_Treatment, col_ObjectCount, col_QC, negative_ctrl, positive_ctrl, excluded_Experiments) {
-    
+
     echo("")
     echo("Treatment Summary:")
     echo("******************")
     echo("")
     
     # get all necessary information
-    measurement <- measurements
     experiments <- sort(unique(data[[col_Experiment]]))
-    #experiments_to_exclude <- htmGetVectorSettings("statistics$experiments_to_exclude")
-    # negcontrols <- c(htmGetListSetting(htm,"statistics","negativeControl"))
-    #transformation <- htmGetListSetting(htm,"statistics","transformation")
-    treatments <- sort(unique(data[[col_Treatment]]))
-    #colObjectCount <- colObjectCount
+    experiments <- experiments[!experiments %in% excluded_Experiments]
+    treatments  <- sort(unique(data[[col_Treatment]]))
+    
     
     # output
     echo(""); echo("Experiments:")
@@ -1116,10 +1113,10 @@ htmTreatmentSummary <- function(data, measurements, col_Experiment, col_Treatmen
     echo(""); echo("Number of treatments: ", length(treatments))
     echo(""); echo("Negative control: ", negative_ctrl)
     echo(""); echo("Positive control: ", positive_ctrl)
-    echo(""); echo("Measurement: ", measurement)
+    echo(""); echo("Measurements: ", measurements)
     echo(""); echo("")
-    
-    if(!(measurement %in% names(data))) {
+
+    if(!all(sapply(measurements, function(x) x %in% names(data)))) {
         echo("ERROR: measurement ", measurement, " does not exist in data")
         return(0)
     }
@@ -1129,35 +1126,34 @@ htmTreatmentSummary <- function(data, measurements, col_Experiment, col_Treatmen
     }
     
     
-    numEntries = length(treatments)
-    
-    results <- data.frame(measurement      = rep(measurement,numEntries),
-                          controls         = rep(negative_ctrl,numEntries),  
-                          treatment        = rep(NA,numEntries),
-                          batches          = rep(NA,numEntries),
-                          means            = rep(NA,numEntries),
-                          median__means    = rep(NA,numEntries),
-                          #z_scores = rep(NA,numEntries),
-                          #median__z_scores = rep(NA,numEntries),
-                          
-                          t_test__estimate = rep(NA,numEntries),
-                          t_test__p_value  = rep(NA,numEntries),
-                          t_test__p_value_adjusted  = rep(NA,numEntries),
-                          t_test__signCode = rep(NA,numEntries),
-                          
-                          
-                          #z_score__allBatches=rep(NA,numEntries),
-                          #robust_z_score__allBatches=rep(NA,numEntries),
-                          
-                          mean_number_of_objects_per_image=rep(NA,numEntries),
-                          
-                          numObjectsOK     = rep(NA,numEntries),
-                          numImagesOK      = rep(NA,numEntries), 
-                          numReplicatesOK  = rep(NA,numEntries),
-                          #numPositionsOK=rep(NA,numEntries),
-                          #numPositions=rep(NA,numEntries),
+    numTreatments = length(treatments)
+
+    results <- data.frame(measurement      = rep(NA, numTreatments),
+                          controls         = rep(negative_ctrl, numTreatments),
+                          treatment        = rep(NA, numTreatments),
+                          batches          = rep(NA, numTreatments),
+                          means            = rep(NA, numTreatments),
+                          median__means    = rep(NA, numTreatments),
+
+                          t_test__estimate = rep(NA,numTreatments),
+                          t_test__p_value  = rep(NA,numTreatments),
+                          t_test__p_value_adjusted  = rep(NA,numTreatments),
+                          t_test__signCode = rep(NA,numTreatments),
+
+                          mean_number_of_objects_per_image=rep(NA,numTreatments),
+                         
+                          numObjectsOK     = rep(NA,numTreatments),
+                          numImagesOK      = rep(NA,numTreatments), 
+                          numReplicatesOK  = rep(NA,numTreatments),
+                          #numPositionsOK=rep(NA,numTreatments),
+                          #numPositions=rep(NA,numTreatments),
                           stringsAsFactors = FALSE
     )
+    results <- lapply(measurements, function(x){
+        results$measurement <- x
+        results
+    })
+    names(results) <- measurements
     
     
     
@@ -1166,295 +1162,302 @@ htmTreatmentSummary <- function(data, measurements, col_Experiment, col_Treatmen
     ###################################
     
     echo("Computing statistics...")
-    ids_treatments = split(1:nrow(data), data[[col_Treatment]])
-    
-    i=0
-    
-    for(ids in ids_treatments) {
-        
-        # ********************************
-        # T-test  
-        # ********************************
-        
-        # treatment name
-        treat <- data[ids[1],col_Treatment]
-        
-        # init
-        t_test__p_value  = NA
-        t_test__signCode = NA
-        t_test__estimate = NA
-        z_scores         = NA
-        median__z_scores = NA
-        median__means    = NA
-        means            = NA
-        batches          = NA
-        d = data.frame(value=NA, treatment=NA, experiment=NA)
-        
-        # compute
-        if(1) { #treat %in% c("SETDB1_s19112")) {
 
-            # only keep valid treatment values to find the corresponding experiments
-            ids         <- ids[which((data[ids,col_QC]==1) & !(is.na(data[ids,measurement])))]
-            ids_negctrl <- if(negative_ctrl == "All treatments"){
-                               which(data[[col_QC]]==1 & !is.na(data[[measurement]]))
-                           } else{
-                               which(data[[col_QC]]==1 & !is.na(data[[measurement]]) & data[[col_Treatment]] %in% negative_ctrl)
-                           }
-            ids_ok      <- c(ids, ids_negctrl)
-            exps        <- unique(data[ids,col_Experiment])
-            
-            # extract treatment and control values of the respective experiments
-            d <- subset(data[ids_ok,], 
-                        (data[ids_ok, col_Experiment] %in% exps), 
-                        select = c(col_Treatment,measurement,col_Experiment,col_ObjectCount))
-            
-            names(d)[names(d)==measurement]     <- "value"
-            names(d)[names(d)==col_Treatment]   <- "treatment"
-            names(d)[names(d)==col_Experiment]  <- "experiment"
-            names(d)[names(d)==col_ObjectCount] <- "count"
-            
-            d[1:length(ids), "treatment"] <- treat
-            d[(length(ids)+1):(length(ids)+length(ids_negctrl)), "treatment"] <- "control"
-            
-            
-            if ( (sum(d$treatment=="control")>1) & (sum(d$treatment==treat)>1) ) {
-                
-                #d$experiment <- as.factor(substr(d$experiment, nchar(d$experiment)-7+1, nchar(d$experiment)))
-                d$treatment <- as.factor(d$treatment)
-                d$treatment <- relevel( d$treatment, "control" ) # control must be the 1st level for the linear model
-                t <- t.test(d$value ~ d$treatment)  # as there typically is enough data no equal variance is assumed
-                
-                nBlocks = length(unique(d$experiment)) 
-                n = nrow(d)
-                #print(2-2*pt(abs(t$statistic), df = n - (nBlocks-1) - 2 ))
+    for(measurement in measurements){
 
-                t_test__p_value  <- 2 - 2 * pt( abs(t$statistic), df = n - (nBlocks-1) - 2 )
-                t_test__estimate <- t$estimate[2]
-
-            }
-            
-            if ( (sum(d$treatment=="control")>=1) & (sum(d$treatment==treat)>=1) ) {
-                
-                d_ctrl = subset(d, d$treatment=="control")
-                means_ctrl <- tapply(d_ctrl$value, d_ctrl$experiment, mean)
-                sds_ctrl <- tapply(d_ctrl$value, d_ctrl$experiment, sd)
-                
-                d_treat = subset(d, d$treatment==treat)
-                means_treat <- tapply(d_treat$value, d_treat$experiment, mean)
-                
-                tryCatch(z_scores <- (means_treat - means_ctrl) / sds_ctrl
-                         , error = function(e) {
-                             echo(d)
-                             echo(treat)
-                             echo(means_treat)
-                             echo(negative_ctrl)
-                             echo(means_ctrl)
-                             #print(sds_ctrl)
-                             echo(z_scores)
-                             echo(ids)
-                             echo(idsOld)
-                             echo(data[ids,])
-                             echo(data[idsOld,])
-                             echo(e)
-                             
-                             
-                             ddd
-                         })
-                
-                median__z_scores = median(z_scores)
-                
-                z_scores = paste(round(z_scores,2),collapse=";")
-                
-            }
-            
-            #print(d)
-            #print(treat)
-            #print(means_treat)
-            #print(negative_ctrl)
-            #print(means_ctrl)
-            #print(sds_ctrl)
-            #print(z_scores)
-            #ddd        
-            
-            
-        } # select treatment for debugging
-        
-        
-        if(!(treat %in% negative_ctrl)) {
-            d_treated = subset(d, d$treatment==treat )
-        } else {
-            d_treated = subset(d, d$treatment=="control")
-        }
-        
-        
-        # these  values need no negative control, that's why they are outside of above if-statement
-        means_treated <- tapply(d_treated$value, d_treated$experiment, mean)
-        batches       <- paste(names(means_treated),collapse=";")
-        means         <- paste(round(means_treated,3),collapse=";")
-        median__means <- median(means_treated)
-        
-        
-        i = i + 1
-        results$treatment[i] <- treat
-        results$batches[i] = batches
-        results$means[i] = means
-        results$median__means[i] = median__means
-        results$t_test__p_value[i] = t_test__p_value
-        results$t_test__p_value_adjusted[i] = NA # this will be computed below after the treatment loop
-        results$t_test__signCode[i] = NA # this will be computed below after the treatment loop
-        results$t_test__estimate[i] = t_test__estimate
-        #results$z_scores[i] = z_scores
-        #results$median__z_scores[i] = median__z_scores
-        results$numObjectsOK[i] = sum(d_treated$count)
-        results$numImagesOK[i] = nrow(d_treated)
-        results$numReplicatesOK[i]= length(unique(d_treated$experiment))
-        results$mean_number_of_objects_per_image[i] = results$numObjectsOK[i]/results$numImagesOK[i]
-        
-        
-    }  # treatment loop   
-
-    #
-    # Adjust p-values
-    #
-    # FDR = False discovery rate = FP / (FP + TP)
-    #   TP + FP = total number of "hits"
-    # FP = False positive
-    # TP = True positive
-    #
-    # BH adjustment method:
-    # - say we have M measurements
-    # - sort all the p-values
-    # - multiply the p-values with M/K, where the K is the rank in the ordering
-    #       - that means that the lowest p-value will be multiplied with M/1, the 2nd lowest with M/2, a.s.o.
-    #
-    # - after this adjustment a p-value threshold of 0.05 means that the FDR is 0.05
-    # - in other words: the probability that a hit is a false positive is 0.05
-    #
-    # Literature:
-    # - http://varianceexplained.org/statistics/interpreting-pvalue-histogram/
-    #
-    #
-
-    results$t_test__p_value_adjusted = p.adjust(results$t_test__p_value, method = "BH")
-
-
-    results$t_test__signCode <- ifelse(results$t_test__p_value_adjusted<0.001,"***",
-                                ifelse(results$t_test__p_value_adjusted<0.01,"**",
-                                ifelse(results$t_test__p_value_adjusted<0.05,"*",
-                                ifelse(results$t_test__p_value_adjusted<0.1,".",
-                                " "
-                                ))))
-
-    echo("")
-    echo("done. Created Treatment Summary Table.")
-    
-    
-    # Diagnostics 
-    
-    #hist(res)
-    #dev.new()
-    #qqnorm(res)
-    #qqline(res)
-    #print(wellScoreForANOVA)
-    
-    # display controls plot: raw well scores
-    #print("Plot control scores...")
-    #htmJitterplot(htm, cx="experiment", cy=well_raw_score, .ylab=well_raw_score, datatype="wells", 
-    #              treatmentSubset = htmGetListSetting(htm,"statistics","negativeControl"),
-    #              showMedian = F, showMean = T)
-    
-    # display controls plot: batch corrected well scores
-    #print("Plot batch corrected control scores...")
-    #htmJitterplot(htm, cx="experiment", cy=wellMinusMeanCtrlScores, .ylab=wellMinusMeanCtrlScores, datatype="wells", 
-    #              treatmentSubset = htmGetListSetting(htm,"statistics","negativeControl"),
-    #              showMedian = F, showMean = T)
-    
-    
-    # save controls plot
-    #  htmJitterplot(htm, cx="experiment", cy=wellScoreForANOVA, .ylab=wellScoreForANOVA, datatype="wells", 
-    #                treatmentSubset = htmGetListSetting(htm,"statistics","negativeControl"),
-    #                showMedian = F, showMean = T, save2file = T, newdev = F)
-    
-    # save histogram as plot
-    #  print(paste("histo:",wellMinusMeanCtrlScores))
-    #  htmHisto(wellMinusMeanCtrlScores, datatype="wells", treatmentSubset = htmGetListSetting(htm,"statistics","negativeControl"), save2file=T)
-    
-    #htm@wellSummary$exp_treat = paste(htm@wellSummary$experiment,htm@wellSummary$treatment,sep="_")
-    #edit(htm@wellSummary$exp_treat)
-    #print(wellMinusMeanCtrlScores)
-    # todo: plot only if makes sense
-    #htmJitterplot(htm, cx="exp_treat", cy=wellMinusMeanCtrlScores, .ylab=wellMinusMeanCtrlScores, datatype="wells", 
-    #                treatmentSubset = c(htmGetListSetting(htm,"statistics","negativeControl"),htmGetListSetting(htm,"statistics","positiveControl")),
-    #                showMedian = F, showMean = T, save2file = F, newdev = F)
-    
-    
-    #####
-    
-    if(positive_ctrl != "None selected") {
-        
-        echo("")
-        echo("")
-        echo("Checking positive and negative control separation in each batch:")
-        echo("")
+        echo("***********************************************************************")
         echo("Measurement: ", measurement)
-        echo("Positive control: ", positive_ctrl)
-        echo("Negative control: ", negative_ctrl)
-        echo("")
-        
-        z_scores = c()
-        
-        for(exp in experiments) {
-            
-            d <- subset(data, (data[[col_Experiment]]==exp) & (data[[col_QC]]==1) & !(is.na(data[[measurement]])), select = c(col_Treatment, measurement))
-            names(d)[names(d) == measurement] <- "value"
-            names(d)[names(d) == col_Treatment] <- "treatment"
-            
-            d_neg    <- subset(d,d$treatment == negative_ctrl)
-            mean_neg <- mean(d_neg$value)
-            sd_neg   <- sd(d_neg$value)
-            n_neg    <- length(d_neg$value)
-            
-            d_pos    <- subset(d,d$treatment == positive_ctrl)
-            mean_pos <- mean(d_pos$value)
-            sd_pos   <- sd(d_pos$value)
-            n_pos    <- length(d_pos$value)
-            
-            #print(paste(min_neg,max_neg,mean_pos,sd_pos))
-            #probability_of_pos_outside_neg = 1 - integrate( function(x) {dnorm(x,mean=mean_pos,sd=sd_pos)}, min_neg, max_neg)$value
-            z_score = (mean_pos-mean_neg) / sd_neg
-            z_scores = c(z_scores, z_score)
-            #t_value = (mean_pos-mean_neg) / sqrt(sd_pos^2+sd_neg^2)
-            
-            
-            #print(paste0(exp,"  N_neg: ",n_neg,"  N_pos: ",n_pos,"  Probability: ",round(probability_of_pos_outside_neg,3))) #,"  t-value: ",t_value))
-            #quality = ifelse(abs(z_score)<1,"XX",
-            #                 ifelse(abs(z_score)<2,"X",""
-            #                               ))
-            quality = ""
-            
-            #if ( exp %in% excluded_Experiments ) {
-            #    comment = "(Excluded)  " 
-            #} else {
-            comment = ""
-            #}
-            
-            echo(comment, exp, "; N_neg: ", n_neg, "; N_pos: ", n_pos, "; mean z-score of positive controls: ", round(z_score,3), " ", quality) #,"  t-value: ",t_value))
-            
+
+        # Select negative controls
+        ids_negctrl <- if(negative_ctrl == "All treatments"){
+            which(data[[col_QC]]==1 & !(data[[col_Experiment]] %in% excluded_Experiments) & !is.na(data[[measurement]]))
+        } else{
+            which(data[[col_QC]]==1 & !(data[[col_Experiment]] %in% excluded_Experiments) & !is.na(data[[measurement]]) & data[[col_Treatment]] %in% negative_ctrl)
         }
         
+        i <- 0
+         
+        for(treatment in treatments) {
+            
+            # ********************************
+            # T-test  
+            # ********************************
+            
+            ids_treatment = (1:nrow(data))[data[[col_Treatment]] == treatment]
+            
+            # init
+            t_test__p_value  = NA
+            t_test__signCode = NA
+            t_test__estimate = NA
+            z_scores         = NA
+            median__z_scores = NA
+            median__means    = NA
+            means            = NA
+            batches          = NA
+            d = data.frame(value=NA, treatment=NA, experiment=NA)
+            
+            # compute
+            # only keep valid treatment values to find the corresponding experiments
+            ids    <- ids_treatment[which(data[ids_treatment,col_QC]==1 & !(data[ids_treatment, col_Experiment] %in% excluded_Experiments) & !is.na(data[ids_treatment,measurement]))]
+            ids_ok <- c(ids, ids_negctrl)
+            exps   <- unique(data[ids,col_Experiment])
+                
+                # extract treatment and control values of the respective experiments
+                d <- subset(data[ids_ok,], 
+                            (data[ids_ok, col_Experiment] %in% exps), 
+                            select = c(col_Treatment,measurement,col_Experiment,col_ObjectCount))
+                
+                names(d)[names(d)==measurement]     <- "value"
+                names(d)[names(d)==col_Treatment]   <- "treatment"
+                names(d)[names(d)==col_Experiment]  <- "experiment"
+                names(d)[names(d)==col_ObjectCount] <- "count"
+                
+                d[1:length(ids), "treatment"] <- treatment
+                d[(length(ids)+1):(length(ids)+length(ids_negctrl)), "treatment"] <- "control"
+                
+                
+                if ( (sum(d$treatment=="control")>1) & (sum(d$treatment==treatment)>1) ) {
+                    
+                    d$treatment <- as.factor(d$treatment)
+                    d$treatment <- relevel( d$treatment, "control" ) # control must be the 1st level for the linear model
+                    t <- t.test(d$value ~ d$treatment)  # as there typically is enough data no equal variance is assumed
+                    
+                    nBlocks = length(unique(d$experiment)) 
+                    n = nrow(d)
+                    
+                    t_test__p_value  <- 2 - 2 * pt( abs(t$statistic), df = n - (nBlocks-1) - 2 )
+                    t_test__estimate <- t$estimate[2]
+    
+                }
+                
+                if ( (sum(d$treatment=="control")>=1) & (sum(d$treatment==treatment)>=1) ) {
+                    
+                    d_ctrl = d[d$treatment=="control",]
+                    means_ctrl <- tapply(d_ctrl$value, d_ctrl$experiment, mean)
+                    sds_ctrl <- tapply(d_ctrl$value, d_ctrl$experiment, sd)
+                    
+                    d_treat = d[d$treatment==treatment,]
+                    means_treat <- tapply(d_treat$value, d_treat$experiment, mean)
+                    
+                    tryCatch(z_scores <- (means_treat - means_ctrl) / sds_ctrl
+                             , error = function(e) {
+                                 echo(d)
+                                 echo(treatment)
+                                 echo(means_treat)
+                                 echo(negative_ctrl)
+                                 echo(means_ctrl)
+                                 #print(sds_ctrl)
+                                 echo(z_scores)
+                                 echo(ids)
+                                 echo(idsOld)
+                                 echo(data[ids,])
+                                 echo(data[idsOld,])
+                                 echo(e)
+                                 
+                                 
+                                 ddd
+                             })
+                    
+                    median__z_scores = median(z_scores)
+                    
+                    z_scores = paste(round(z_scores,2),collapse=";")
+                    
+                }
+                
+                #print(d)
+                #print(treat)
+                #print(means_treat)
+                #print(negative_ctrl)
+                #print(means_ctrl)
+                #print(sds_ctrl)
+                #print(z_scores)
+                #ddd        
+                
+                
+            # select treatment for debugging
+            if(!(treatment %in% negative_ctrl)) {
+                d_treated = d[d$treatment==treatment,]
+            } else {
+                d_treated = d[d$treatment=="control",]
+            }
+            
+            
+            # these  values need no negative control, that's why they are outside of above if-statement
+            means_treated <- tapply(d_treated$value, d_treated$experiment, mean)
+            batches       <- paste(names(means_treated),collapse=";")
+            means         <- paste(round(means_treated,3),collapse=";")
+            median__means <- median(means_treated)
+            
+            
+            i = i + 1
+            results[[measurement]]$treatment[i] <- treatment
+            results[[measurement]]$batches[i] = batches
+            results[[measurement]]$means[i] = means
+            results[[measurement]]$median__means[i] = median__means
+            results[[measurement]]$t_test__p_value[i] = t_test__p_value
+            results[[measurement]]$t_test__p_value_adjusted[i] = NA # this will be computed below after the treatment loop
+            results[[measurement]]$t_test__signCode[i] = NA # this will be computed below after the treatment loop
+            results[[measurement]]$t_test__estimate[i] = t_test__estimate
+            #results[[measurement]]$z_scores[i] = z_scores
+            #results[[measurement]]$median__z_scores[i] = median__z_scores
+            results[[measurement]]$numObjectsOK[i] = sum(d_treated$count)
+            results[[measurement]]$numImagesOK[i] = nrow(d_treated)
+            results[[measurement]]$numReplicatesOK[i]= length(unique(d_treated$experiment))
+            results[[measurement]]$mean_number_of_objects_per_image[i] = results[[measurement]]$numObjectsOK[i]/results[[measurement]]$numImagesOK[i]
+            
+            
+        }  # treatment loop   
+    
+    
+        #
+        # Adjust p-values
+        #
+        # FDR = False discovery rate = FP / (FP + TP)
+        #   TP + FP = total number of "hits"
+        # FP = False positive
+        # TP = True positive
+        #
+        # BH adjustment method:
+        # - say we have M measurements
+        # - sort all the p-values
+        # - multiply the p-values with M/K, where the K is the rank in the ordering
+        #       - that means that the lowest p-value will be multiplied with M/1, the 2nd lowest with M/2, a.s.o.
+        #
+        # - after this adjustment a p-value threshold of 0.05 means that the FDR is 0.05
+        # - in other words: the probability that a hit is a false positive is 0.05
+        #
+        # Literature:
+        # - http://varianceexplained.org/statistics/interpreting-pvalue-histogram/
+        #
+        #
+    
+
+        results[[measurement]]$t_test__p_value_adjusted = p.adjust(results[[measurement]]$t_test__p_value, method = "BH")
+        
+        results[[measurement]]$t_test__signCode <- ifelse(results[[measurement]]$t_test__p_value_adjusted<0.001,"***",
+                                                   ifelse(results[[measurement]]$t_test__p_value_adjusted<0.01,"**",
+                                                   ifelse(results[[measurement]]$t_test__p_value_adjusted<0.05,"*",
+                                                   ifelse(results[[measurement]]$t_test__p_value_adjusted<0.1,".",
+                                                   " "
+                                                         ))))
+
         echo("")
-        echo("z-scores (N, mean, sd): ", length(z_scores), " ", mean(z_scores, na.rm=T), " ", sd(z_scores, na.rm=T))
+        echo("Done for measurement '", measurement, "'. Created Treatment Summary Table.")
+        
+        
+        # Diagnostics 
+        
+        #hist(res)
+        #dev.new()
+        #qqnorm(res)
+        #qqline(res)
+        #print(wellScoreForANOVA)
+        
+        # display controls plot: raw well scores
+        #print("Plot control scores...")
+        #htmJitterplot(htm, cx="experiment", cy=well_raw_score, .ylab=well_raw_score, datatype="wells", 
+        #              treatmentSubset = htmGetListSetting(htm,"statistics","negativeControl"),
+        #              showMedian = F, showMean = T)
+        
+        # display controls plot: batch corrected well scores
+        #print("Plot batch corrected control scores...")
+        #htmJitterplot(htm, cx="experiment", cy=wellMinusMeanCtrlScores, .ylab=wellMinusMeanCtrlScores, datatype="wells", 
+        #              treatmentSubset = htmGetListSetting(htm,"statistics","negativeControl"),
+        #              showMedian = F, showMean = T)
+        
+        
+        # save controls plot
+        #  htmJitterplot(htm, cx="experiment", cy=wellScoreForANOVA, .ylab=wellScoreForANOVA, datatype="wells", 
+        #                treatmentSubset = htmGetListSetting(htm,"statistics","negativeControl"),
+        #                showMedian = F, showMean = T, save2file = T, newdev = F)
+        
+        # save histogram as plot
+        #  print(paste("histo:",wellMinusMeanCtrlScores))
+        #  htmHisto(wellMinusMeanCtrlScores, datatype="wells", treatmentSubset = htmGetListSetting(htm,"statistics","negativeControl"), save2file=T)
+        
+        #htm@wellSummary$exp_treat = paste(htm@wellSummary$experiment,htm@wellSummary$treatment,sep="_")
+        #edit(htm@wellSummary$exp_treat)
+        #print(wellMinusMeanCtrlScores)
+        # todo: plot only if makes sense
+        #htmJitterplot(htm, cx="exp_treat", cy=wellMinusMeanCtrlScores, .ylab=wellMinusMeanCtrlScores, datatype="wells", 
+        #                treatmentSubset = c(htmGetListSetting(htm,"statistics","negativeControl"),htmGetListSetting(htm,"statistics","positiveControl")),
+        #                showMedian = F, showMean = T, save2file = F, newdev = F)
+        
+        
+        #####
+    
+        if(positive_ctrl != "None selected") {
+            
+            echo("")
+            echo("")
+            echo("Checking positive and negative control separation in each batch:")
+            echo("")
+            echo("Measurement: ", measurement)
+            echo("Positive control: ", positive_ctrl)
+            echo("Negative control: ", negative_ctrl)
+            echo("")
+            
+            z_scores = c()
+            
+            for(exp in experiments) {
+                
+                d <- subset(data, (data[[col_Experiment]]==exp) & (data[[col_QC]]==1) & !(is.na(data[[measurement]])), select = c(col_Treatment, measurement))
+                names(d)[names(d) == measurement] <- "value"
+                names(d)[names(d) == col_Treatment] <- "treatment"
+                
+                d_neg    <- subset(d,d$treatment == negative_ctrl)
+                mean_neg <- mean(d_neg$value)
+                sd_neg   <- sd(d_neg$value)
+                n_neg    <- length(d_neg$value)
+                
+                d_pos    <- subset(d,d$treatment == positive_ctrl)
+                mean_pos <- mean(d_pos$value)
+                sd_pos   <- sd(d_pos$value)
+                n_pos    <- length(d_pos$value)
+                
+                #print(paste(min_neg,max_neg,mean_pos,sd_pos))
+                #probability_of_pos_outside_neg = 1 - integrate( function(x) {dnorm(x,mean=mean_pos,sd=sd_pos)}, min_neg, max_neg)$value
+                z_score = (mean_pos-mean_neg) / sd_neg
+                z_scores = c(z_scores, z_score)
+                #t_value = (mean_pos-mean_neg) / sqrt(sd_pos^2+sd_neg^2)
+                
+                
+                #print(paste0(exp,"  N_neg: ",n_neg,"  N_pos: ",n_pos,"  Probability: ",round(probability_of_pos_outside_neg,3))) #,"  t-value: ",t_value))
+                #quality = ifelse(abs(z_score)<1,"XX",
+                #                 ifelse(abs(z_score)<2,"X",""
+                #                               ))
+                quality = ""
+                
+                #if ( exp %in% excluded_Experiments ) {
+                #    comment = "(Excluded)  " 
+                #} else {
+                comment = ""
+                #}
+                
+                echo(comment, exp, "; N_neg: ", n_neg, "; N_pos: ", n_pos, "; mean z-score of positive controls: ", round(z_score,3), " ", quality) #,"  t-value: ",t_value))
+                
+            }
+            
+            echo("")
+            echo("z-scores (N, mean, sd): ", length(z_scores), " ", mean(z_scores, na.rm=T), " ", sd(z_scores, na.rm=T))
+            
+        }
         
     }
+    
+
     
     
     # sorted hit-list with significance level * ** ***
     # plot colored according to significance level
-    #with hits marked as sign
+    # with hits marked as sign
+    results_ordered <- lapply(results, function(df){
+        df[order(df$t_test__p_value),]
+    })
+    results_ordered <- do.call(rbind, results_ordered)
+    row.names(results_ordered) <- NULL
     
-    results_ordered <- results[order(results$t_test__p_value),]
-    return(results_ordered)
-    
+    results_ordered
 }
 
 getObjectPositionColumn <- function( names, axis )
