@@ -1204,7 +1204,8 @@ shinyServer(function(input, output, session){
             # Save summary table
             echo("")
             echo("Please save the summary table using the popup window.")
-            path <- tclvalue(tkgetSaveFile(initialfile = paste0("TreatmentSummary--", input$SummaryMeasurements, ".csv")))
+            all_measurements <- paste(input$SummaryMeasurements, collapse = "--")
+            path <- tclvalue(tkgetSaveFile(initialfile = paste0("TreatmentSummary--", all_measurements, ".csv")))
             write.csv(temp, path, row.names = FALSE)
             
             if(path == ""){

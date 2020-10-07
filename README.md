@@ -79,3 +79,13 @@ runGitHub("shinyHTM", "embl-cba")
 * This will run the latest version of shinyHTM  
 * Sample datasets are provided [here](https://github.com/hmbotelho/sample_data).  
 
+
+## Testing
+Tests for some shinyHTM features are available for development purposes.  
+Tests are available in the `./tests` folder, require the `testthat` package and do not require the shiny app to be running.  
+To run all tests do the following:  
+```r
+# install.packages("testthat")
+setwd("c:/yourfolderhere/shinyhtm/tests")       # adjust
+source("testthat.R")
+```
